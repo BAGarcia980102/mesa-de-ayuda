@@ -53,4 +53,39 @@ const createRequest = async (data) => {
   return result.rows[0];
 };
 
-module.exports = { createRequest };
+const getAllRequests = async () => {
+  try {
+    const result = await pool.query(`
+      SELECT id, client_name, request_type, reference, plate, observations, 
+             company_name, address, contact_name, phone, is_client_owned, 
+             asset_tag, fault_description, task_to_perform, documents_to_carry,
+             created_at, assigned_to, status
+      FROM requests 
+      ORDER BY created_at DESC
+    `);
+    return result.rows;
+  } catch (error) {
+    console.error('Error al obtener las solicitudes:', error);
+    throw error;
+  }
+};
+
+const assignRequestToTechnician = async (id, technicianName) => {
+  try {
+    const result = await pool.query(
+      'UPDATE requests SET assigned_to = $1, status = $2 WHERE id = $3 RETURNING *',
+      [technicianName, 'Asignada', id]
+    );
+    return result.rows[0];
+  } catch (error) {
+    console.error('Error al asignar técnico:', error);
+    throw error;
+  }
+};
+
+module.exports = {
+  createRequest,
+  getAllRequests,
+  assignRequestToTechnician,
+  pool
+};

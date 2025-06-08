@@ -1,10 +1,12 @@
 const express = require('express');
 const router = express.Router();
 
-// Importa el controlador correctamente
-const { registerRequest } = require('../src/controllers/requestController');
+// Importar las funciones del controlador
+const { registerRequest, getAllRequests, assignRequest } = require('../src/controllers/requestController');
 
-// Define la ruta POST
-router.post('/', registerRequest);
+// Rutas para solicitudes
+router.post('/requests', registerRequest);  // Crear solicitud
+router.get('/requests', getAllRequests);    // Obtener todas las solicitudes
+router.put('/requests/:id/assign', assignRequest);  // Asignar solicitud a técnico
 
 module.exports = router;

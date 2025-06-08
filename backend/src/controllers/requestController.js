@@ -1,13 +1,4 @@
-const { createRequest } = require('../models/Request');
-const { Pool } = require('pg');
-const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
-  ssl: false
-});
+const { createRequest, assignRequestToTechnician, pool } = require('../models/Request');
 
 const registerRequest = async (req, res) => {
   try {
@@ -16,7 +7,6 @@ const registerRequest = async (req, res) => {
     
     const newRequest = await createRequest(requestData);
     console.log('Solicitud creada exitosamente:', newRequest);
-    
     res.status(201).json(newRequest);
   } catch (error) {
     console.error('Error detallado:', {
@@ -24,7 +14,6 @@ const registerRequest = async (req, res) => {
       stack: error.stack,
       name: error.name
     });
-    
     if (error.code === '23502') {
       res.status(400).json({ error: 'Todos los campos requeridos deben estar presentes' });
     } else if (error.code === '23503') {
@@ -34,6 +23,19 @@ const registerRequest = async (req, res) => {
     } else {
       res.status(500).json({ error: 'Error al registrar la solicitud', details: error.message });
     }
+  }
+};
+
+const assignRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { technicianName } = req.body;
+
+    const updatedRequest = await assignRequestToTechnician(id, technicianName);
+    res.status(200).json(updatedRequest);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al asignar la solicitud' });
   }
 };
 
@@ -47,4 +49,14 @@ const getAllRequests = async (req, res) => {
   }
 };
 
-module.exports = { registerRequest, getAllRequests };
+module.exports = {
+  registerRequest,
+  getAllRequests,
+  assignRequest
+};
+
+module.exports = {
+  registerRequest,
+  getAllRequests,
+  assignRequest
+};
