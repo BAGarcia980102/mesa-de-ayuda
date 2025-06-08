@@ -1,4 +1,13 @@
 const { createRequest } = require('../models/Request');
+const { Pool } = require('pg');
+const pool = new Pool({
+  user: process.env.DB_USER,
+  host: process.env.DB_HOST,
+  database: process.env.DB_NAME,
+  password: process.env.DB_PASSWORD,
+  port: process.env.DB_PORT,
+  ssl: false
+});
 
 const registerRequest = async (req, res) => {
   try {
@@ -28,4 +37,14 @@ const registerRequest = async (req, res) => {
   }
 };
 
-module.exports = { registerRequest };
+const getAllRequests = async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM requests ORDER BY created_at DESC');
+    res.status(200).json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al obtener las solicitudes' });
+  }
+};
+
+module.exports = { registerRequest, getAllRequests };
