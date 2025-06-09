@@ -60,7 +60,7 @@ const RequestList: React.FC = () => {
 
   const fetchRequests = async () => {
     try {
-      const response = await axios.get('http://localhost:3001/api/requests');
+      const response = await axios.get('http://localhost:5001/api/requests');
       console.log('Response data:', response.data);
       setRequests(response.data);
     } catch (error) {
@@ -85,7 +85,7 @@ const RequestList: React.FC = () => {
     }
 
     try {
-      await axios.put(`http://localhost:3001/api/requests/${id}/assign`, { technicianName: selectedTech });
+      await axios.put(`http://localhost:5001/api/requests/${id}/assign`, { technicianName: selectedTech });
       alert('Técnico asignado exitosamente.');
       fetchRequests(); // Refresca la lista
     } catch (error) {
