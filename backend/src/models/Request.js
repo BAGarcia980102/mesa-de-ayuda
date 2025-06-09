@@ -26,18 +26,15 @@ const createRequest = async (data) => {
   // Mapeamos companyName y contactName a client_name y contact_name
   const query = `
     INSERT INTO requests 
-      (client_name, request_type, reference, plate, observations, company_name, address, contact_name, phone, is_client_owned, asset_tag, fault_description, task_to_perform, documents_to_carry, created_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+      (request_type, reference, company_name, address, contact_name, phone, is_client_owned, asset_tag, fault_description, task_to_perform, documents_to_carry, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
     RETURNING *;
   `;
 
   // Vamos a enviar 'companyName' como client_name para cumplir con NOT NULL
   const values = [
-    companyName || contactName || 'N/A',   // client_name
     requestType,
     reference || '',                       // reference
-    '',                                    // plate (no lo usamos ahora)
-    '',                                    // observations (no lo usamos ahora)
     companyName || '',                     // company_name
     address || '',                         // address
     contactName || '',                     // contact_name
@@ -56,7 +53,7 @@ const createRequest = async (data) => {
 const getAllRequests = async () => {
   try {
     const result = await pool.query(`
-      SELECT id, client_name, request_type, reference, plate, observations, 
+      SELECT id, request_type, reference,
              company_name, address, contact_name, phone, is_client_owned, 
              asset_tag, fault_description, task_to_perform, documents_to_carry,
              created_at, assigned_to, status
