@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User, Building, Phone, MapPin, Calendar, AlertCircle, FileText, Wrench, Clock, CheckCircle } from 'lucide-react';
 import { api } from '../api/api';
 
@@ -20,6 +20,8 @@ interface Request {
   created_at: string;
   assigned_to: string;
   technician_id: number;
+  latitude?: number;
+  longitude?: number;
 }
 
 interface Technician {
@@ -28,11 +30,98 @@ interface Technician {
 }
 
 const TechnicianRequests: React.FC = () => {
+  // Estados principales del componente
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [selectedTechnician, setSelectedTechnician] = useState<string>('');
   const [requests, setRequests] = useState<Request[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+
+  // Estado para geolocalización
+  const [locationPermission, setLocationPermission] = useState<'granted' | 'denied' | null>(null);
+  const [locationError, setLocationError] = useState<string>('');
+  const locationInterval = useRef<NodeJS.Timeout>();
+
+  // Solicitar permisos de geolocalización al montar el componente
+  useEffect(() => {
+    const requestLocationPermission = async () => {
+      try {
+        const permission = await navigator.permissions.query({ name: 'geolocation' });
+        setLocationPermission(permission.state);
+        
+        // Escuchar cambios en los permisos
+        permission.onchange = () => {
+          setLocationPermission(permission.state);
+        };
+      } catch (error) {
+        setLocationPermission('denied');
+        setLocationError('Error al solicitar permisos de geolocalización');
+      }
+    };
+
+    requestLocationPermission();
+
+    // Limpiar el intervalo cuando el componente se desmonte
+    return () => {
+      if (locationInterval.current) {
+        clearInterval(locationInterval.current);
+      }
+    };
+  }, []);
+
+  // Función para actualizar el estado basado en geolocalización
+  const checkLocationAndUpdateStatus = async (requestId: number, latitude: number, longitude: number) => {
+    try {
+      const response = await api.requests.updateStatusByLocation(requestId, latitude, longitude);
+      
+      if (response.status === 'En progreso') {
+        // Actualizar el estado local
+        setRequests(prevRequests => 
+          prevRequests.map(prevRequest => 
+            prevRequest.id === requestId ? { ...prevRequest, status: 'En progreso' } : prevRequest
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Error en actualización automática:', error);
+      setLocationError('Error al verificar ubicación');
+    }
+  };
+
+  // Iniciar el intervalo de verificación de ubicación para cada solicitud
+  useEffect(() => {
+    if (locationPermission === 'granted' && selectedTechnician) {
+      // Limpiar cualquier intervalo anterior
+      if (locationInterval.current) {
+        clearInterval(locationInterval.current);
+      }
+
+      // Iniciar nuevo intervalo
+      locationInterval.current = setInterval(async () => {
+        try {
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject);
+          });
+
+          // Verificar ubicación para cada solicitud
+          requests.forEach(req => {
+            if (req.status === 'En camino' && req.latitude && req.longitude) {
+              checkLocationAndUpdateStatus(req.id, position.coords.latitude, position.coords.longitude);
+            }
+          });
+        } catch (error) {
+          console.error('Error al obtener ubicación:', error);
+          setLocationError('Error al obtener ubicación');
+        }
+      }, 30000); // Verificar cada 30 segundos
+    }
+
+    return () => {
+      if (locationInterval.current) {
+        clearInterval(locationInterval.current);
+      }
+    };
+  }, [locationPermission, selectedTechnician, requests]);
 
   // Cargar lista de técnicos al montar el componente
   useEffect(() => {
@@ -83,7 +172,7 @@ const TechnicianRequests: React.FC = () => {
     fetchRequests();
   }, [selectedTechnician]);
 
-  // Función para actualizar el estado de una solicitud
+  // Función para actualizar el estado manualmente
   const handleStatusUpdate = async (requestId: number, newStatus: string) => {
     try {
       const response = await api.requests.updateStatus(requestId, newStatus);
@@ -215,6 +304,17 @@ const TechnicianRequests: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Estado de geolocalización */}
+        {(locationPermission === 'denied' || locationError) && (
+          <div className="bg-yellow-50 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative mb-4">
+            <span className="block sm:inline">
+              {locationPermission === 'denied' 
+                ? 'Por favor, habilite los permisos de geolocalización para que el sistema pueda detectar automáticamente cuando llegue al destino.' 
+                : locationError}
+            </span>
+          </div>
+        )}
 
         {/* Estado de carga */}
         {loading && (
