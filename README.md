@@ -96,6 +96,7 @@ npm run dev
 - Sequelize (ORM)
 - CORS
 - dotenv
+- geolib (para cálculo de distancias)
 
 ### Frontend
 - React
@@ -104,6 +105,12 @@ npm run dev
 - Tailwind CSS
 - Axios
 - React Router DOM
+- geolocation API (navegador)
+- geolocation API (navegador)
+
+## Geolocalización
+
+La aplicación utiliza la geolocalización para determinar la ubicación de los técnicos y actualizar automáticamente el estado de las solicitudes.
 
 ## Funcionalidades
 
@@ -112,6 +119,13 @@ npm run dev
 - Asignación de técnicos a solicitudes
 - Filtros por tipo de solicitud y estado
 - Interfaz responsive y moderna
+
+## Geolocalización para Técnicos
+
+- Verificación automática de llegada al destino
+- Actualización automática de estado a "En progreso" cuando el técnico llega
+- Verificación de ubicación cada 30 segundos
+- Manejo de permisos y errores de geolocalización
 
 ## Contribución
 
