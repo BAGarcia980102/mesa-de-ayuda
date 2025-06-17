@@ -43,7 +43,7 @@ const RegisterRequest: React.FC = () => {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:5001/api/requests', formData);
+      await axios.post('http://localhost:5001/requests', formData);
       alert('Solicitud registrada exitosamente');
       setFormData({
         companyName: '',
@@ -155,7 +155,7 @@ const RegisterRequest: React.FC = () => {
                 checked={formData.isClientOwned}
                 onChange={handleChange}
               />
-              <label className="font-medium">¿Propia del Cliente?</label>
+              <label className="font-medium">¿Propia del TYS?</label>
             </div>
 
             {formData.isClientOwned && (

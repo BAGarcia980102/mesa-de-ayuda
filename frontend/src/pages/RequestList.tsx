@@ -36,7 +36,9 @@ interface Request {
   created_at: string;
   assigned_to: string | null;
   status: string;
-  address: string;  // Agregado para mantener consistencia con el código existente
+  address: string;
+  technician_name: string | null;
+  technician_id: number | null;
 }
 
 const technicians = [
@@ -50,7 +52,6 @@ const technicians = [
 
 const RequestList: React.FC = () => {
   const [requests, setRequests] = useState<Request[]>([]);
-  const [selectedTechnicians, setSelectedTechnicians] = useState<{ [key: number]: string }>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,7 +61,7 @@ const RequestList: React.FC = () => {
 
   const fetchRequests = async () => {
     try {
-      const response = await axios.get('http://localhost:5001/api/requests');
+      const response = await axios.get('http://localhost:5001/requests');
       console.log('Response data:', response.data);
       setRequests(response.data);
     } catch (error) {
@@ -77,20 +78,58 @@ const RequestList: React.FC = () => {
     }
   };
 
+  const [selectedTechnicianId, setSelectedTechnicianId] = useState<{ [key: number]: string }>({});
+
+  useEffect(() => {
+    // Cuando las solicitudes cambian, actualizamos selectedTechnicianId
+    const technicianMap = requests.reduce((acc, req) => {
+      if (req.technician_id && req.technician_name) {
+        acc[req.id] = req.technician_name;
+      }
+      return acc;
+    }, {} as { [key: number]: string });
+
+    setSelectedTechnicianId(technicianMap);
+  }, [requests]);
+
   const handleAssign = async (id: number) => {
-    const selectedTech = selectedTechnicians[id];
-    if (!selectedTech) {
+    const technicianName = selectedTechnicianId[id];
+    if (!technicianName) {
       alert('Por favor, selecciona un técnico.');
       return;
     }
 
     try {
-      await axios.put(`http://localhost:5001/api/requests/${id}/assign`, { technicianName: selectedTech });
-      alert('Técnico asignado exitosamente.');
-      fetchRequests(); // Refresca la lista
+      console.log('Enviando datos de asignación:', {
+        requestId: id,
+        technicianName: technicianName
+      });
+
+      const response = await axios.put(`http://localhost:5001/requests/${id}/assign`, {
+        technicianName
+      });
+      
+      console.log('Respuesta del servidor:', response.data);
+      
+      // Actualizar el estado local
+      setRequests(
+        requests.map(req =>
+          req.id === id
+            ? response.data
+            : req
+        )
+      );
+      
+      // Actualizar el técnico seleccionado
+      setSelectedTechnicianId(prev => ({
+        ...prev,
+        [id]: response.data.technician_name || response.data.assigned_to || technicianName
+      }));
+      
+      alert('Técnico asignado exitosamente!');
     } catch (error) {
-      console.error(error);
-      alert('Error al asignar el técnico.');
+      console.error('Error detallado:', error.response?.data || error);
+      alert('Error al asignar el técnico. Por favor, intenta nuevamente.');
     }
   };
 
@@ -202,18 +241,28 @@ const RequestList: React.FC = () => {
 
                 <div>
                   <dt className="text-sm font-medium text-gray-500">Técnico Asignado</dt>
-                  <dd className="mt-1 text-sm text-gray-900">{req.assigned_to || '-'}</dd>
+                  <dd className="mt-1 text-sm text-gray-900">
+                    {req.technician_id 
+                      ? req.technician_name || 'Desconocido' 
+                      : req.assigned_to || '-'}
+                  </dd>
                 </div>
 
                 <div className="flex justify-between">
                   <select
-                    value={selectedTechnicians[req.id] || ''}
-                    onChange={(e) =>
-                      setSelectedTechnicians({
-                        ...selectedTechnicians,
-                        [req.id]: e.target.value
-                      })
-                    }
+                    value={req.technician_name || req.assigned_to || ''}
+                    onChange={(e) => {
+                      const technicianName = e.target.value;
+                      setSelectedTechnicianId(prev => ({
+                        ...prev,
+                        [req.id]: technicianName
+                      }));
+                      
+                      // Actualizar el técnico asignado en el backend
+                      if (technicianName) {
+                        handleAssign(req.id);
+                      }
+                    }}
                     className="p-1 border rounded mr-2"
                   >
                     <option value="">Selecciona un técnico</option>
@@ -222,6 +271,11 @@ const RequestList: React.FC = () => {
                         {tech}
                       </option>
                     ))}
+                    {req.technician_name && !technicians.includes(req.technician_name) && (
+                      <option key={req.technician_name} value={req.technician_name}>
+                        {req.technician_name}
+                      </option>
+                    )}
                   </select>
                   <button
                     onClick={() => handleAssign(req.id)}
