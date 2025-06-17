@@ -19,6 +19,7 @@ interface Request {
   status: string;
   created_at: string;
   assigned_to: string;
+  technician_id: number;
 }
 
 interface Technician {
@@ -35,65 +36,67 @@ const TechnicianRequests: React.FC = () => {
 
   // Cargar lista de técnicos al montar el componente
   useEffect(() => {
-    const fetchTechnicians = async () => {
+    const loadTechnicians = async () => {
       try {
-        console.log('Solicitando técnicos a la API...');
         const technicians = await api.requests.getTechnicians();
         console.log('Técnicos recibidos:', technicians);
-        
-        if (!Array.isArray(technicians)) {
-          console.error('La respuesta no es un array:', technicians);
-          throw new Error('La respuesta de la API no es un array válido');
-        }
-
         setTechnicians(technicians);
       } catch (err) {
-        console.error('Error detallado:', err);
+        console.error('Error al cargar técnicos:', err);
         setError('Error al cargar la lista de técnicos');
       }
     };
 
-    fetchTechnicians();
+    loadTechnicians();
   }, []);
 
-  // Función para buscar solicitudes del técnico
-  const handleSubmit = async () => {
-    if (!selectedTechnician || selectedTechnician === '') {
-      setError('Por favor selecciona un técnico');
-      return;
-    }
-
-    const technicianId = parseInt(selectedTechnician);
-    if (isNaN(technicianId)) {
-      setError('ID de técnico inválido');
-      return;
-    }
-
-    // Verificar que el ID sea un número positivo
-    if (technicianId <= 0) {
-      setError('ID de técnico inválido');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-    
-    try {
-      const requests = await api.requests.getByTechnicianId(technicianId);
-      console.log('Solicitudes recibidas:', requests);
-      setRequests(requests);
-    } catch (err: any) {
-      console.error('Error detallado:', err);
+  // Cargar solicitudes del técnico seleccionado
+  useEffect(() => {
+    const fetchRequests = async () => {
+      setLoading(true);
+      setError('');
       
-      // Mostrar detalles del error si están disponibles
-      if (err.response?.data?.error && err.response?.data?.details) {
-        setError(`Error: ${err.response.data.error}. Detalles: ${err.response.data.details}`);
-      } else {
-        setError('Error al cargar las solicitudes del técnico');
+      try {
+        if (!selectedTechnician) {
+          setError('Por favor, seleccione un técnico');
+          setLoading(false);
+          return;
+        }
+
+        const requests = await api.requests.getByTechnicianId(parseInt(selectedTechnician));
+        console.log('Solicitudes recibidas:', requests);
+        setRequests(requests);
+      } catch (err: any) {
+        console.error('Error detallado:', err);
+        
+        // Mostrar detalles del error si están disponibles
+        if (err.response?.data?.error && err.response?.data?.details) {
+          setError(`${err.response.data.error}: ${err.response.data.details}`);
+        } else {
+          setError('Error al obtener las solicitudes');
+        }
+      } finally {
+        setLoading(false);
       }
-      setRequests([]);
-    } finally {
-      setLoading(false);
+    };
+
+    fetchRequests();
+  }, [selectedTechnician]);
+
+  // Función para actualizar el estado de una solicitud
+  const handleStatusUpdate = async (requestId: number, newStatus: string) => {
+    try {
+      const response = await api.requests.updateStatus(requestId, newStatus);
+      
+      // Actualizar el estado local
+      setRequests(prevRequests => 
+        prevRequests.map(prevRequest => 
+          prevRequest.id === requestId ? { ...prevRequest, status: newStatus } : prevRequest
+        )
+      );
+    } catch (err: any) {
+      console.error('Error actualizando estado:', err);
+      setError('Error al actualizar el estado de la solicitud');
     }
   };
 
@@ -140,7 +143,6 @@ const TechnicianRequests: React.FC = () => {
     }
   };
 
-  // Logs de depuración
   console.log('Técnicos en estado:', technicians);
   console.log('Selected technician:', selectedTechnician);
 
@@ -151,6 +153,13 @@ const TechnicianRequests: React.FC = () => {
           <User className="w-6 h-6 text-blue-600" />
           Solicitudes por Técnico
         </h1>
+
+        {/* Mensaje de error */}
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
+            <span className="block sm:inline">{error}</span>
+          </div>
+        )}
 
         {/* Formulario de selección */}
         <div className="mb-6">
@@ -175,7 +184,30 @@ const TechnicianRequests: React.FC = () => {
               </select>
             </div>
             <button
-              onClick={handleSubmit}
+              onClick={async () => {
+                if (!selectedTechnician || selectedTechnician === '') {
+                  setError('Por favor selecciona un técnico');
+                  return;
+                }
+
+                try {
+                  setLoading(true);
+                  setError('');
+                  const requests = await api.requests.getByTechnicianId(parseInt(selectedTechnician));
+                  console.log('Solicitudes recibidas:', requests);
+                  setRequests(requests);
+                } catch (err: any) {
+                  console.error('Error detallado:', err);
+                  if (err.response?.data?.error && err.response?.data?.details) {
+                    setError(`${err.response.data.error}: ${err.response.data.details}`);
+                  } else {
+                    setError('Error al cargar las solicitudes');
+                  }
+                  setRequests([]);
+                } finally {
+                  setLoading(false);
+                }
+              }}
               disabled={loading}
               className="px-6 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -184,104 +216,75 @@ const TechnicianRequests: React.FC = () => {
           </div>
         </div>
 
-        {/* Mensaje de error */}
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
-            <div className="flex items-center gap-2 text-red-700">
-              <AlertCircle className="w-5 h-5" />
-              <span>{error}</span>
-            </div>
+        {/* Estado de carga */}
+        {loading && (
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
           </div>
         )}
-      </div>
 
-      {/* Lista de solicitudes */}
-      {requests.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">
-            Solicitudes asignadas a {technicians.find(t => t.id === parseInt(selectedTechnician))?.name || 'Técnico'} ({requests.length})
-          </h2>
-          
-          {requests.map((request) => (
-            <div key={request.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              {/* Header de la tarjeta */}
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-3">
-                  <Building className="w-5 h-5 text-blue-600" />
-                  <h3 className="text-lg font-semibold text-gray-800">{request.company_name}</h3>
-                </div>
-                <div className={`px-3 py-1 rounded-full text-xs font-medium border flex items-center gap-1 ${getStatusColor(request.status)}`}>
-                  {getStatusIcon(request.status)}
-                  {request.status}
-                </div>
-              </div>
-
-              {/* Información de contacto */}
-              <div className="grid md:grid-cols-2 gap-4 mb-4 p-4 bg-gray-50 rounded-md">
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-gray-500" />
-                  <span className="text-sm text-gray-700">{request.address}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-gray-500" />
-                  <span className="text-sm text-gray-700">{request.contact_name}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Phone className="w-4 h-4 text-gray-500" />
-                  <span className="text-sm text-gray-700">{request.phone}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-gray-500" />
-                  <span className="text-sm text-gray-700">{formatDate(request.created_at)}</span>
-                </div>
-              </div>
-
-              {/* Información específica según tipo */}
-              <div className="border-t pt-4">
-                <div className="mb-3">
-                  <span className="inline-block px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
-                    {request.request_type}
-                  </span>
-                </div>
-
-                {request.request_type === 'Servicio Técnico' ? (
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <h4 className="font-medium text-gray-800 mb-2">Información del Equipo</h4>
-                      <div className="space-y-2 text-sm">
-                        {request.reference && (
-                          <div>
-                            <span className="font-medium">Referencia:</span> {request.reference}
-                          </div>
-                        )}
-                        {request.is_client_owned && request.asset_tag && (
-                          <div>
-                            <span className="font-medium">Activo Fijo:</span> {request.asset_tag}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-gray-800 mb-2">Descripción de la Falla</h4>
-                      <p className="text-sm text-gray-700">{request.fault_description}</p>
+        {/* Lista de solicitudes */}
+        {requests.length > 0 ? (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">
+              Solicitudes asignadas a {technicians.find(t => t.id === parseInt(selectedTechnician))?.name || 'Técnico'} ({requests.length})
+            </h2>
+            <div className="space-y-4">
+              {requests.map((req: Request) => (
+                <div key={req.id} className="bg-white rounded-lg shadow-sm p-4">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-semibold text-gray-800">
+                      {req.company_name}
+                    </h3>
+                    <div className={`px-2 py-1 rounded-full text-sm ${getStatusColor(req.status)}`}>
+                      {getStatusIcon(req.status)} {req.status}
                     </div>
                   </div>
-                ) : (
-                  <div>
-                    <h4 className="font-medium text-gray-800 mb-2">Diligencia a Realizar</h4>
-                    <p className="text-sm text-gray-700">{request.task_to_perform}</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Dirección:</p>
+                      <p className="text-gray-900">{req.address}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Contacto:</p>
+                      <p className="text-gray-900">{req.contact_name}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Teléfono:</p>
+                      <p className="text-gray-900">{req.phone}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Tipo de solicitud:</p>
+                      <p className="text-gray-900">{req.request_type}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Fecha:</p>
+                      <p className="text-gray-900">{formatDate(req.created_at)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Técnico asignado:</p>
+                      <p className="text-gray-900">{req.assigned_to}</p>
+                    </div>
                   </div>
-                )}
-
-                {/* Documentos a llevar */}
-                {Array.isArray(request.documents_to_carry) && request.documents_to_carry.length > 0 && (
                   <div className="mt-4">
-                    <h4 className="font-medium text-gray-800 mb-2 flex items-center gap-2">
-                      <FileText className="w-4 h-4" />
-                      Documentos a llevar
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {request.documents_to_carry.map((doc, index) => (
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Estado actual:
+                    </label>
+                    <select
+                      value={req.status}
+                      onChange={(e) => handleStatusUpdate(req.id, e.target.value)}
+                      className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-orange-500 focus:border-orange-500 sm:text-sm rounded-md"
+                    >
+                      <option value="En camino">En camino</option>
+                      <option value="En progreso">En progreso</option>
+                      <option value="Terminado">Terminado</option>
+                    </select>
+                  </div>
+
+                  <div className="mt-4">
+                    <dt className="text-sm font-medium text-gray-500">Documentos a llevar</dt>
+                    <dd className="mt-1 text-sm text-gray-900 flex flex-wrap gap-2">
+                      {(Array.isArray(req.documents_to_carry) ? req.documents_to_carry : []).map((doc: string, index: number) => (
                         <span
                           key={index}
                           className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md"
@@ -289,37 +292,37 @@ const TechnicianRequests: React.FC = () => {
                           {doc}
                         </span>
                       ))}
+                    </dd>
+                  </div>
+
+                  {req.observations && req.observations.trim() && (
+                    <div className="mt-4">
+                      <h4 className="font-medium text-gray-800 mb-2">Observaciones</h4>
+                      <p className="text-sm text-gray-700 bg-yellow-50 p-3 rounded-md">
+                        {req.observations}
+                      </p>
                     </div>
-                  </div>
-                )}
-
-                {/* Observaciones */}
-                {request.observations && request.observations.trim() && (
-                  <div className="mt-4">
-                    <h4 className="font-medium text-gray-800 mb-2">Observaciones</h4>
-                    <p className="text-sm text-gray-700 bg-yellow-50 p-3 rounded-md">
-                      {request.observations}
-                    </p>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Estado vacío */}
-      {!loading && requests.length === 0 && selectedTechnician && (
-        <div className="text-center py-12">
-          <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-700 mb-2">
-            No hay solicitudes asignadas
-          </h3>
-          <p className="text-gray-500">
-            El técnico {selectedTechnician} no tiene solicitudes asignadas actualmente.
-          </p>
-        </div>
-      )}
+          </div>
+        ) : !loading && selectedTechnician ? (
+          <div className="text-center py-12">
+            <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-700 mb-2">
+              No hay solicitudes asignadas
+            </h3>
+            <p className="text-gray-500">
+              El técnico {selectedTechnician} no tiene solicitudes asignadas actualmente.
+            </p>
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <p className="text-gray-500">Por favor, selecciona un técnico para ver sus solicitudes.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
