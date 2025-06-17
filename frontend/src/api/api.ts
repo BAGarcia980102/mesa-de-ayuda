@@ -27,7 +27,23 @@ export const api = {
         throw error;
       }
     },
-    updateStatus: (id: number, status: string) => 
-      axios.put(`${API_URL}/requests/${id}/status`, { status })
+    updateStatus: async (id: number, status: string) => {
+      try {
+        const response = await axios.put(`${API_URL}/requests/${id}/status`, { status });
+        return response.data;
+      } catch (error) {
+        console.error('Error actualizando estado:', error);
+        throw error;
+      }
+    },
+    updateStatusByLocation: async (id: number, latitude: number, longitude: number) => {
+      try {
+        const response = await axios.put(`${API_URL}/requests/${id}/auto-status`, { latitude, longitude });
+        return response.data;
+      } catch (error) {
+        console.error('Error en actualización automática:', error);
+        throw error;
+      }
+    }
   }
 };

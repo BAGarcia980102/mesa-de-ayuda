@@ -1,4 +1,5 @@
 const { createRequest, assignRequestToTechnician, pool, getTechnicians } = require('../models/Request');
+const geolib = require('geolib');
 
 const registerRequest = async (req, res) => {
   try {
@@ -23,6 +24,161 @@ const registerRequest = async (req, res) => {
     } else {
       res.status(500).json({ error: 'Error al registrar la solicitud', details: error.message });
     }
+  }
+};
+
+const updateRequestStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    // Validar que el estado sea uno de los permitidos
+    const validStatuses = ['En camino', 'En progreso', 'Terminado'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        error: 'Estado no válido',
+        details: 'Los estados permitidos son: En camino, En progreso, Terminado'
+      });
+    }
+
+    // Verificar si la solicitud existe
+    const checkQuery = `
+      SELECT id, technician_id FROM requests WHERE id = $1;
+    `;
+    const checkResult = await pool.query(checkQuery, [id]);
+
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({
+        error: 'Solicitud no encontrada',
+        details: 'La solicitud especificada no existe'
+      });
+    }
+
+    // Verificar que el técnico esté asignado a la solicitud
+    if (!checkResult.rows[0].technician_id) {
+      return res.status(400).json({
+        error: 'Solicitud no asignada',
+        details: 'La solicitud no tiene un técnico asignado'
+      });
+    }
+
+    // Actualizar el estado de la solicitud
+    const updateQuery = `
+      UPDATE requests 
+      SET status = $1
+      WHERE id = $2
+      RETURNING *;
+    `;
+
+    const result = await pool.query(updateQuery, [status, id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(500).json({
+        error: 'Error al actualizar el estado',
+        details: 'No se pudo actualizar el estado de la solicitud'
+      });
+    }
+
+    res.status(200).json(result.rows[0]);
+  } catch (error) {
+    console.error('Error actualizando estado:', error);
+    res.status(500).json({
+      error: 'Error interno del servidor',
+      details: error.message
+    });
+  }
+};
+
+// Endpoint para actualizar estado automáticamente basado en geolocalización
+const updateStatusByLocation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { latitude: technicianLat, longitude: technicianLng } = req.body;
+
+    // Verificar si la solicitud existe y tiene coordenadas
+    const checkQuery = `
+      SELECT id, status, latitude, longitude, technician_id 
+      FROM requests 
+      WHERE id = $1;
+    `;
+    const checkResult = await pool.query(checkQuery, [id]);
+
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({
+        error: 'Solicitud no encontrada',
+        details: 'La solicitud especificada no existe'
+      });
+    }
+
+    const request = checkResult.rows[0];
+    
+    // Verificar que la solicitud tenga coordenadas
+    if (!request.latitude || !request.longitude) {
+      return res.status(400).json({
+        error: 'Solicitud sin coordenadas',
+        details: 'La solicitud no tiene coordenadas geográficas registradas'
+      });
+    }
+
+    // Verificar que el técnico esté asignado
+    if (!request.technician_id) {
+      return res.status(400).json({
+        error: 'Solicitud no asignada',
+        details: 'La solicitud no tiene un técnico asignado'
+      });
+    }
+
+    // Verificar que el estado actual sea "En camino"
+    if (request.status !== 'En camino') {
+      return res.status(400).json({
+        error: 'Estado no permitido',
+        details: 'La solicitud debe estar en estado "En camino" para actualizar automáticamente'
+      });
+    }
+
+    // Calcular distancia entre la ubicación actual del técnico y el destino
+    const distance = geolib.getDistance(
+      { latitude: technicianLat, longitude: technicianLng },
+      { latitude: request.latitude, longitude: request.longitude }
+    );
+
+    console.log('Distancia al destino:', distance, 'metros');
+
+    // Si la distancia es menor a 50 metros, actualizar el estado a "En progreso"
+    if (distance <= 50) {
+      const updateQuery = `
+        UPDATE requests 
+        SET status = 'En progreso'
+        WHERE id = $1
+        RETURNING *;
+      `;
+      const result = await pool.query(updateQuery, [id]);
+      
+      if (result.rows.length === 0) {
+        return res.status(500).json({
+          error: 'Error al actualizar el estado',
+          details: 'No se pudo actualizar el estado de la solicitud'
+        });
+      }
+
+      return res.status(200).json({
+        message: 'Estado actualizado a "En progreso"',
+        request: result.rows[0]
+      });
+    }
+
+    return res.status(200).json({
+      message: 'Técnico aún no ha llegado al destino',
+      distance: distance,
+      status: request.status
+    });
+
+  } catch (error) {
+    console.error('Error en actualización automática:', error);
+    res.status(500).json({
+      error: 'Error interno del servidor',
+      details: error.message
+    });
   }
 };
 
@@ -185,6 +341,8 @@ module.exports = {
   registerRequest,
   getAllRequests,
   assignRequest,
+  updateRequestStatus,
   getRequestsByTechnician,
-  getTechniciansList
+  getTechniciansList,
+  updateStatusByLocation
 };
